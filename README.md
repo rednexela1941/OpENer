@@ -7,165 +7,164 @@
 
 
 # Documentation
-
-/** @mainpage OpENer - Open Source EtherNet/IP(TM) Communication Stack
- * Documentation
- *
- * EtherNet/IP stack for adapter devices (connection target); supports multiple
- * I/O and explicit connections; includes features and objects required by the
- * CIP specification to enable devices to comply with ODVA's conformance/
- * interoperability tests.
- *
- * @section intro_sec Introduction
- *
- * This is the introduction.
- *
- * @section install_sec Building
- * How to compile, install and run OpENer on a specific platform.
- *
- * @subsection build_req_sec Requirements
- * OpENer has been developed to be highly portable. The default version targets
- * PCs with a POSIX operating system and a BSD-socket network interface. To
- * test this version we recommend a Linux PC or Windows with Cygwin installed.
- *  You will need to have the following installed:
- *   - gcc, make, binutils, etc.
- *
- * for normal building. These should be installed on most Linux installations
- * and are part of the development packages of Cygwin.
- *
- * For the development itself we recommend the use of Eclipse with the CDT
- * plugin. For your convenience OpENer already comes with an Eclipse project
- * file. This allows to just import the OpENer source tree into Eclipse.
- *
- * @subsection compile_pcs_sec Compile for PCs
- *   -# Directly in the shell
- *       -# Go into the bin/pc directory
- *       -# Invoke make
- *       -# For invoking opener type:\n
- *          ./opener ipaddress subnetmask gateway domainname hostaddress
- * macaddress\n
- *          e.g., ./opener 192.168.0.2 255.255.255.0 192.168.0.1 test.com
- * testdevice 00 15 C5 BF D0 87
- *   -# Within Eclipse
- *       -# Import the project
- *       -# Go to the bin/pc folder in the make targets view
- *       -# Choose all from the make targets
- *       -# The resulting executable will be in the directory
- *           ./bin/pc
- *       -# The command line parameters can be set in the run configuration
- * dialog of Eclipse
- *
- * @section further_reading_sec Further Topics
- *   - @ref porting
- *   - @ref extending
- *   - @ref license
- *
- * @page porting Porting OpENer
- * @section gen_config_section General Stack Configuration
- * The general stack properties have to be defined prior to building your
- * production. This is done by providing a file called opener_user_conf.h. An
- * example file can be found in the src/ports/POSIX or src/ports/WIN32 directory.
- * The documentation of the example file for the necessary configuration options:
- * opener_user_conf.h
- *
- * @copydoc ./ports/POSIX/sample_application/opener_user_conf.h
- *
- * @section startup_sec Startup Sequence
- * During startup of your EtherNet/IP(TM) device the following steps have to be
- * performed:
- *   -# Configure the network properties:\n
- *       With the following functions the network interface of OpENer is
- *       configured:
- *        - EIP_STATUS ConfigureNetworkInterface(const char *ip_address,
- *        const char *subnet_mask, const char *gateway_address)
- *        - void ConfigureMACAddress(const EIP_UINT8 *mac_address)
- *        - void ConfigureDomainName(const char *domain_name)
- *        - void ConfigureHostName(const char *host_name)
- *        .
- *       Depending on your platform these data can come from a configuration
- *       file or from operating system functions. If these values should be
- *       setable remotely via explicit messages the SetAttributeSingle functions
- *       of the EtherNetLink and the TCPIPInterface object have to be adapted.
- *   -# Set the device's serial number\n
- *      According to the CIP specification a device vendor has to ensure that
- *      each of its devices has a unique 32Bit device id. You can set it with
- *      the function:
- *       - void setDeviceSerialNumber(EIP_UINT32 serial_number)
- *   -# Initialize OpENer: \n
- *      With the function CipStackInit(EIP_UINT16 unique_connection_id) the
- *      internal data structures of opener are correctly setup. After this
- *      step own CIP objects and Assembly objects instances may be created. For
- *      your convenience we provide the call-back function
- *      ApplicationInitialization. This call back function is called when the
- * stack is ready to receive application specific CIP objects.
- *   -# Create Application Specific CIP Objects:\n
- *      Within the call-back function ApplicationInitialization(void) or
- *      after CipStackInit(void) has finished you may create and configure any
- *      CIP object or Assembly object instances. See the module @ref CIP_API
- *      for available functions. Currently no functions are available to
- *      remove any created objects or instances. This is planned
- *      for future versions.
- *   -# Setup the listening TCP and UDP port:\n
- *      THE ETHERNET/IP SPECIFICATION demands from devices to listen to TCP
- *      connections and UDP datagrams on the port AF12hex for explicit messages.
- *      Therefore before going into normal operation you need to configure your
- *      network library so that TCP and UDP messages on this port will be
- *      received and can be hand over to the Ethernet encapsulation layer.
- *
- * @section normal_op_sec Normal Operation
- * During normal operation the following tasks have to be done by the platform
- * specific code:
- *   - Establish connections requested on TCP port AF12hex
- *   - Receive explicit message data on connected TCP sockets and the UPD socket
- *     for port AF12hex. The received data has to be hand over to Ethernet
- *     encapsulation layer with the functions: \n
- *      int HandleReceivedExplictTCPData(int socket_handle, EIP_UINT8* buffer, int
- * buffer_length, int *number_of_remaining_bytes),\n
- *      int HandleReceivedExplictUDPData(int socket_handle, struct sockaddr_in
- * *from_address, EIP_UINT8* buffer, unsigned int buffer_length, int
- * *number_of_remaining_bytes).\n
- *     Depending if the data has been received from a TCP or from a UDP socket.
- *     As a result of this function a response may have to be sent. The data to
- *     be sent is in the given buffer pa_buf.
- *   - Create UDP sending and receiving sockets for implicit connected
- * messages\n
- *     OpENer will use to call-back function int CreateUdpSocket(
- *     UdpCommuncationDirection connection_direction,
- *     struct sockaddr_in *pa_pstAddr)
- *     for informing the platform specific code that a new connection is
- *     established and new sockets are necessary
- *   - Receive implicit connected data on a receiving UDP socket\n
- *     The received data has to be hand over to the Connection Manager Object
- *     with the function EIP_STATUS HandleReceivedConnectedData(EIP_UINT8
- * *data, int data_length)
- *   - Close UDP and TCP sockets:
- *      -# Requested by OpENer through the call back function: void
- * CloseSocket(int socket_handle)
- *      -# For TCP connection when the peer closed the connection OpENer needs
- *         to be informed to clean up internal data structures. This is done
- * with
- *         the function void CloseSession(int socket_handle).
- *      .
- *   - Cyclically update the connection status:\n
- *     In order that OpENer can determine when to produce new data on
- *     connections or that a connection timed out every @ref kOpenerTimerTickInMilliSeconds
- * milliseconds the
- *     function EIP_STATUS ManageConnections(void) has to be called.
- *
- * @section callback_funcs_sec Callback Functions
- * In order to make OpENer more platform independent and in order to inform the
- * application on certain state changes and actions within the stack a set of
- * call-back functions is provided. These call-back functions are declared in
- * the file opener_api.h and have to be implemented by the application specific
- * code. An overview and explanation of OpENer's call-back API may be found in
- * the module @ref CIP_CALLBACK_API.
- *
- * @page extending Extending OpENer
- * OpENer provides an API for adding own CIP objects and instances with
- * specific services and attributes. Therefore OpENer can be easily adapted to
- * support different device profiles and specific CIP objects needed for your
- * device. The functions to be used are:
- *   - CipClass *CreateCipClass( const CipUdint class_code,
+    @mainpage OpENer - Open Source EtherNet/IP(TM) Communication Stack
+	##  Documentation
+	
+	 EtherNet/IP stack for adapter devices (connection target); supports multiple
+	 I/O and explicit connections; includes features and objects required by the
+	 CIP specification to enable devices to comply with ODVA's conformance/
+	 interoperability tests.
+	
+	 @section intro_sec Introduction
+	
+	 ## This is the introduction.
+	
+	 @section install_sec Building
+	 How to compile, install and run OpENer on a specific platform.
+	
+	 @subsection build_req_sec Requirements
+	 OpENer has been developed to be highly portable. The default version targets
+	 PCs with a POSIX operating system and a BSD-socket network interface. To
+	 test this version we recommend a Linux PC or Windows with Cygwin installed.
+	  You will need to have the following installed:
+	   - gcc, make, binutils, etc.
+	
+	 for normal building. These should be installed on most Linux installations
+	 and are part of the development packages of Cygwin.
+	
+	 For the development itself we recommend the use of Eclipse with the CDT
+	 plugin. For your convenience OpENer already comes with an Eclipse project
+	 file. This allows to just import the OpENer source tree into Eclipse.
+	
+	 @subsection compile_pcs_sec Compile for PCs
+	   -# Directly in the shell
+	       -# Go into the bin/pc directory
+	       -# Invoke make
+	       -# For invoking opener type:\n
+	          ./opener ipaddress subnetmask gateway domainname hostaddress
+	 macaddress\n
+	          e.g., ./opener 192.168.0.2 255.255.255.0 192.168.0.1 test.com
+	 testdevice 00 15 C5 BF D0 87
+	   -# Within Eclipse
+	       -# Import the project
+	       -# Go to the bin/pc folder in the make targets view
+	       -# Choose all from the make targets
+	       -# The resulting executable will be in the directory
+	           ./bin/pc
+	       -# The command line parameters can be set in the run configuration
+	 dialog of Eclipse
+	
+	 @section further_reading_sec Further Topics
+	   - @ref porting
+	   - @ref extending
+	   - @ref license
+	
+	 @page porting Porting OpENer
+	 @section gen_config_section General Stack Configuration
+	 The general stack properties have to be defined prior to building your
+	 production. This is done by providing a file called opener_user_conf.h. An
+	 example file can be found in the src/ports/POSIX or src/ports/WIN32 directory.
+	 The documentation of the example file for the necessary configuration options:
+	 opener_user_conf.h
+	
+	 @copydoc ./ports/POSIX/sample_application/opener_user_conf.h
+	
+	 @section startup_sec Startup Sequence
+	 During startup of your EtherNet/IP(TM) device the following steps have to be
+	 performed:
+	   -# Configure the network properties:\n
+	       With the following functions the network interface of OpENer is
+	       configured:
+	        - EIP_STATUS ConfigureNetworkInterface(const char *ip_address,
+	        const char *subnet_mask, const char *gateway_address)
+	        - void ConfigureMACAddress(const EIP_UINT8 *mac_address)
+	        - void ConfigureDomainName(const char *domain_name)
+	        - void ConfigureHostName(const char *host_name)
+	        .
+	       Depending on your platform these data can come from a configuration
+	       file or from operating system functions. If these values should be
+	       setable remotely via explicit messages the SetAttributeSingle functions
+	       of the EtherNetLink and the TCPIPInterface object have to be adapted.
+	   -# Set the device's serial number\n
+	      According to the CIP specification a device vendor has to ensure that
+	      each of its devices has a unique 32Bit device id. You can set it with
+	      the function:
+	       - void setDeviceSerialNumber(EIP_UINT32 serial_number)
+	   -# Initialize OpENer: \n
+	      With the function CipStackInit(EIP_UINT16 unique_connection_id) the
+	      internal data structures of opener are correctly setup. After this
+	      step own CIP objects and Assembly objects instances may be created. For
+	      your convenience we provide the call-back function
+	      ApplicationInitialization. This call back function is called when the
+	 stack is ready to receive application specific CIP objects.
+	   -# Create Application Specific CIP Objects:\n
+	      Within the call-back function ApplicationInitialization(void) or
+	      after CipStackInit(void) has finished you may create and configure any
+	      CIP object or Assembly object instances. See the module @ref CIP_API
+	      for available functions. Currently no functions are available to
+	      remove any created objects or instances. This is planned
+	      for future versions.
+	   -# Setup the listening TCP and UDP port:\n
+	      THE ETHERNET/IP SPECIFICATION demands from devices to listen to TCP
+	      connections and UDP datagrams on the port AF12hex for explicit messages.
+	      Therefore before going into normal operation you need to configure your
+	      network library so that TCP and UDP messages on this port will be
+	      received and can be hand over to the Ethernet encapsulation layer.
+	
+	 @section normal_op_sec Normal Operation
+	 During normal operation the following tasks have to be done by the platform
+	 specific code:
+	   - Establish connections requested on TCP port AF12hex
+	   - Receive explicit message data on connected TCP sockets and the UPD socket
+	     for port AF12hex. The received data has to be hand over to Ethernet
+	     encapsulation layer with the functions: \n
+	      int HandleReceivedExplictTCPData(int socket_handle, EIP_UINT8* buffer, int
+	 buffer_length, int *number_of_remaining_bytes),\n
+	      int HandleReceivedExplictUDPData(int socket_handle, struct sockaddr_in
+	 *from_address, EIP_UINT8* buffer, unsigned int buffer_length, int
+	 *number_of_remaining_bytes).\n
+	     Depending if the data has been received from a TCP or from a UDP socket.
+	     As a result of this function a response may have to be sent. The data to
+	     be sent is in the given buffer pa_buf.
+	   - Create UDP sending and receiving sockets for implicit connected
+	 messages\n
+	     OpENer will use to call-back function int CreateUdpSocket(
+	     UdpCommuncationDirection connection_direction,
+	     struct sockaddr_in *pa_pstAddr)
+	     for informing the platform specific code that a new connection is
+	     established and new sockets are necessary
+	   - Receive implicit connected data on a receiving UDP socket\n
+	     The received data has to be hand over to the Connection Manager Object
+	     with the function EIP_STATUS HandleReceivedConnectedData(EIP_UINT8
+	 *data, int data_length)
+	   - Close UDP and TCP sockets:
+	      -# Requested by OpENer through the call back function: void
+	 CloseSocket(int socket_handle)
+	      -# For TCP connection when the peer closed the connection OpENer needs
+	         to be informed to clean up internal data structures. This is done
+	 with
+	         the function void CloseSession(int socket_handle).
+	      .
+	   - Cyclically update the connection status:\n
+	     In order that OpENer can determine when to produce new data on
+	     connections or that a connection timed out every @ref kOpenerTimerTickInMilliSeconds
+	 milliseconds the
+	     function EIP_STATUS ManageConnections(void) has to be called.
+	
+	 @section callback_funcs_sec Callback Functions
+	 In order to make OpENer more platform independent and in order to inform the
+	 application on certain state changes and actions within the stack a set of
+	 call-back functions is provided. These call-back functions are declared in
+	 the file opener_api.h and have to be implemented by the application specific
+	 code. An overview and explanation of OpENer's call-back API may be found in
+	 the module @ref CIP_CALLBACK_API.
+	
+	 @page extending Extending OpENer
+	 OpENer provides an API for adding own CIP objects and instances with
+	 specific services and attributes. Therefore OpENer can be easily adapted to
+	 support different device profiles and specific CIP objects needed for your
+	 device. The functions to be used are:
+	   - CipClass *CreateCipClass( const CipUdint class_code,
                           const int number_of_class_attributes,
                           const EipUint32 highest_class_attribute_number,
                           const int number_of_class_services,
@@ -176,29 +175,29 @@
                           char *name,
                           const EipUint16 revision,
                           InitializeCipClass initializer );
- *   - CipInstance *AddCipInstances(CipClass *RESTRICT const cip_class,
+	   - CipInstance *AddCipInstances(CipClass *RESTRICT const cip_class,
                              const int number_of_instances)
- *   - CipInstance *AddCipInstance(CipClass *RESTRICT const class,
+	   - CipInstance *AddCipInstance(CipClass *RESTRICT const class,
                             const EipUint32 instance_id)
- *   - void InsertAttribute(CipInstance *const cip_instance,
+	   - void InsertAttribute(CipInstance *const cip_instance,
                      const EipUint16 attribute_number,
                      const EipUint8 cip_data_type,
                      void *const cip_data,
                      const EipByte cip_flags);
- *   - void InsertService(const CipClass *const cip_class_to_add_service,
+	   - void InsertService(const CipClass *const cip_class_to_add_service,
                    const EipUint8 service_code,
                    const CipServiceFunction service_function,
                    char *const service_name);
- *
- * @page license OpENer Open Source License
- * The OpENer Open Source License is an adapted BSD style license. The
- * adaptations include the use of the term EtherNet/IP(TM) and the necessary
- * guarding conditions for using OpENer in own products. For this please look
- * in license text as shown below:
- *
- * @include "../license.txt"
- *
- */ 
+	
+	 @page license OpENer Open Source License
+	 The OpENer Open Source License is an adapted BSD style license. The
+	 adaptations include the use of the term EtherNet/IP(TM) and the necessary
+	 guarding conditions for using OpENer in own products. For this please look
+	 in license text as shown below:
+	
+	 @include "../license.txt"
+	
+	/ 
 
 
 
@@ -234,8 +233,7 @@ OpENer has been developed to be highly portable. The default version targets PCs
 with a POSIX operating system and a BSD-socket network interface. To test this 
 version we recommend a Linux PC or Windows with Cygwin (http://www.cygwin.com) 
 installed. You will need to have the following installed:
-
-* CMake
+	 CMake
 * gcc
 * make
 * binutils
